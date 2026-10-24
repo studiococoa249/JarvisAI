@@ -229,6 +229,7 @@ class AIEngine:
         ).strip()
 
         topic = self.config.get("scope_topic", "Jualan & Spill Produk (Keranjang Kuning)").strip()
+        store_info = self.config.get("scope_store_info", "").strip()
         max_words = int(self.config.get("scope_max_words", 15))
         strict_dm = self.config.get("scope_strict_dm", True)
         strict_topic = self.config.get("scope_strict_topic", True)
@@ -240,6 +241,9 @@ class AIEngine:
             f"Panjang balasan: Maksimal 1 kalimat singkat (di bawah {max_words} kata) bahasa Indonesia natural.",
             "Balaslah SESUAI PERSIS dan nyambung dengan topik yang diketik penonton."
         ]
+
+        if store_info:
+            rules.append(f"Informasi Toko / Produk yang Dijual:\n{store_info}")
 
         if strict_dm:
             rules.append("HANYA tawarkan jajan/order lewat DM JIKA penonton secara jelas bertanya mau beli, harga, promo, atau memesan barang.")

@@ -6,7 +6,7 @@ from qfluentwidgets import (
     ScrollArea, SimpleCardWidget, LineEdit, PasswordLineEdit,
     ComboBox, Slider, TextEdit, PrimaryPushButton, PushButton,
     SubtitleLabel, BodyLabel, CaptionLabel, InfoBar, InfoBarPosition,
-    FluentIcon as FIF, SwitchButton, SpinBox
+    FluentIcon as FIF, SwitchButton
 )
 from tts_engine import AVAILABLE_VOICES
 
@@ -97,110 +97,7 @@ class SettingsTab(ScrollArea):
 
         layout.addWidget(ai_card)
 
-        # 2. RUANG LINGKUP & ATURAN KETAT AI (AI SCOPE)
-        scope_card = SimpleCardWidget(container)
-        scope_layout = QVBoxLayout(scope_card)
-        scope_layout.setContentsMargins(20, 16, 20, 16)
-        scope_layout.setSpacing(14)
-
-        scope_title = SubtitleLabel("🎯 Ruang Lingkup & Aturan AI (AI Scope)", scope_card)
-        scope_layout.addWidget(scope_title)
-
-        scope_desc = CaptionLabel(
-            "Tentukan fokus topik live streaming, batasan kata, dan aturan ketat agar AI membalas tepat sasaran dan tidak melenceng.",
-            scope_card
-        )
-        scope_layout.addWidget(scope_desc)
-
-        grid_scope = QGridLayout()
-        grid_scope.setSpacing(12)
-
-        # 1. Topik / Fokus Live Streaming
-        lbl_topic = BodyLabel("Topik / Fokus Live:", scope_card)
-        self.input_scope_topic = LineEdit(scope_card)
-        self.input_scope_topic.setPlaceholderText("Contoh: Jualan & Spill Produk Keranjang Kuning, Fashion Pria/Wanita")
-        self.input_scope_topic.setText(self.config.get("scope_topic", "Jualan & Spill Produk (Keranjang Kuning)"))
-        self.input_scope_topic.setClearButtonEnabled(True)
-
-        grid_scope.addWidget(lbl_topic, 0, 0)
-        grid_scope.addWidget(self.input_scope_topic, 0, 1, 1, 2)
-
-        # 2. Batasan Kata per Balasan
-        lbl_max_words = BodyLabel("Maksimal Kata:", scope_card)
-        self.spin_max_words = SpinBox(scope_card)
-        self.spin_max_words.setRange(5, 50)
-        self.spin_max_words.setValue(int(self.config.get("scope_max_words", 15)))
-        self.spin_max_words.setSuffix(" kata")
-        lbl_max_desc = CaptionLabel("Rekomendasi 10 - 15 kata agar suara TTS cepat dan tidak tertinggal percakapan", scope_card)
-
-        grid_scope.addWidget(lbl_max_words, 1, 0)
-        grid_scope.addWidget(self.spin_max_words, 1, 1)
-        grid_scope.addWidget(lbl_max_desc, 1, 2)
-
-        scope_layout.addLayout(grid_scope)
-
-        # 3. Saklar Aturan Ketat (Switches)
-        # Switch Strict DM
-        row_strict_dm = QHBoxLayout()
-        row_strict_dm.setContentsMargins(4, 2, 4, 2)
-        self.switch_strict_dm = SwitchButton(scope_card)
-        self.switch_strict_dm.setChecked(self.config.get("scope_strict_dm", True))
-        lbl_dm_text = BodyLabel("Aturan Ketat Jajan/DM", scope_card)
-        lbl_dm_cap = CaptionLabel("(Hanya tawarkan order/DM jika penonton bertanya harga/beli secara eksplisit)", scope_card)
-        row_strict_dm.addWidget(self.switch_strict_dm)
-        row_strict_dm.addSpacing(8)
-        row_strict_dm.addWidget(lbl_dm_text)
-        row_strict_dm.addWidget(lbl_dm_cap)
-        row_strict_dm.addStretch()
-        scope_layout.addLayout(row_strict_dm)
-
-        # Switch Strict Topic
-        row_strict_topic = QHBoxLayout()
-        row_strict_topic.setContentsMargins(4, 2, 4, 2)
-        self.switch_strict_topic = SwitchButton(scope_card)
-        self.switch_strict_topic.setChecked(self.config.get("scope_strict_topic", True))
-        lbl_topic_text = BodyLabel("Tetap Pada Topik Live", scope_card)
-        lbl_topic_cap = CaptionLabel("(Arahkan kembali dengan sopan jika penonton berkomentar di luar konteks)", scope_card)
-        row_strict_topic.addWidget(self.switch_strict_topic)
-        row_strict_topic.addSpacing(8)
-        row_strict_topic.addWidget(lbl_topic_text)
-        row_strict_topic.addWidget(lbl_topic_cap)
-        row_strict_topic.addStretch()
-        scope_layout.addLayout(row_strict_topic)
-
-        # Switch No Emoji/Markdown
-        row_no_emoji = QHBoxLayout()
-        row_no_emoji.setContentsMargins(4, 2, 4, 2)
-        self.switch_no_emoji = SwitchButton(scope_card)
-        self.switch_no_emoji.setChecked(self.config.get("scope_no_emoji", True))
-        lbl_emoji_text = BodyLabel("Hapus Emoji & Markdown", scope_card)
-        lbl_emoji_cap = CaptionLabel("(Cegah AI memunculkan emoji, simbol, dan markdown agar ucapan TTS jernih)", scope_card)
-        row_no_emoji.addWidget(self.switch_no_emoji)
-        row_no_emoji.addSpacing(8)
-        row_no_emoji.addWidget(lbl_emoji_text)
-        row_no_emoji.addWidget(lbl_emoji_cap)
-        row_no_emoji.addStretch()
-        scope_layout.addLayout(row_no_emoji)
-
-        # 4. Aturan Kustom / Larangan Tambahan
-        lbl_custom_rules = BodyLabel("Aturan Tambahan / Larangan Khusus (Custom Scope Rules):", scope_card)
-        scope_layout.addWidget(lbl_custom_rules)
-
-        self.input_scope_custom_rules = TextEdit(scope_card)
-        self.input_scope_custom_rules.setPlaceholderText(
-            "Tuliskan aturan tambahan untuk AI di sini. Contoh:\n"
-            "- Pengiriman dilakukan dari Jakarta setiap jam 4 sore\n"
-            "- Jangan menyebut atau membandingkan dengan merk lain\n"
-            "- Selalu panggil penonton dengan sebutan Kakak\n"
-            "- Voucher promo diskon 20% dapat diklaim di profil"
-        )
-        self.input_scope_custom_rules.setPlainText(self.config.get("scope_custom_rules", ""))
-        self.input_scope_custom_rules.setMaximumHeight(85)
-        scope_layout.addWidget(self.input_scope_custom_rules)
-
-        layout.addWidget(scope_card)
-
-        # 3. PENGATURAN SUARA VOICE (EDGE-TTS)
+        # 2. PENGATURAN SUARA VOICE (EDGE-TTS)
         tts_card = SimpleCardWidget(container)
         tts_layout = QVBoxLayout(tts_card)
         tts_layout.setContentsMargins(20, 16, 20, 16)
@@ -358,12 +255,6 @@ class SettingsTab(ScrollArea):
         self.config.set("gemini_api_key", self.input_gemini_key.text().strip())
         self.config.set("gemini_model", self.combo_gemini_model.currentText())
         self.config.set("ai_system_prompt", self.input_prompt.toPlainText().strip())
-        self.config.set("scope_topic", self.input_scope_topic.text().strip())
-        self.config.set("scope_max_words", self.spin_max_words.value())
-        self.config.set("scope_strict_dm", self.switch_strict_dm.isChecked())
-        self.config.set("scope_strict_topic", self.switch_strict_topic.isChecked())
-        self.config.set("scope_no_emoji", self.switch_no_emoji.isChecked())
-        self.config.set("scope_custom_rules", self.input_scope_custom_rules.toPlainText().strip())
         self.config.set("tts_voice", self.combo_voice.currentData())
         self.config.set("tts_rate", f"{self.slider_rate.value():+d}%")
         self.config.set("tts_pitch", f"{self.slider_pitch.value():+d}Hz")

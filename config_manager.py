@@ -9,6 +9,7 @@ DEFAULT_CONFIG = {
     "gemini_api_key": "",
     "gemini_model": "gemini-3.5-flash-lite",
     "scope_topic": "Jualan & Spill Produk (Keranjang Kuning)",
+    "scope_store_info": "",
     "scope_max_words": 15,
     "scope_strict_dm": True,
     "scope_strict_topic": True,

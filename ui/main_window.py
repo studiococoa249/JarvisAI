@@ -11,6 +11,7 @@ from ai_engine import AIEngine
 from tts_engine import TTSEngine
 from tiktok_worker import TikTokWorker
 from ui.live_tab import LiveTab
+from ui.scope_tab import ScopeTab
 from ui.settings_tab import SettingsTab
 from ui.filter_tab import FilterTab
 from ui.log_tab import LogTab
@@ -52,17 +53,22 @@ class MainWindow(FluentWindow):
         self.live_tab.setObjectName("liveInterface")
         self.addSubInterface(self.live_tab, FIF.VIDEO, "Live Monitor")
 
-        # 2. Tab Filter & Kata Kunci
+        # 2. Tab Scope AI (Ruang Lingkup & Aturan)
+        self.scope_tab = ScopeTab(self.config_manager, self)
+        self.scope_tab.setObjectName("scopeInterface")
+        self.addSubInterface(self.scope_tab, FIF.ROBOT, "Scope AI")
+
+        # 3. Tab Filter & Kata Kunci
         self.filter_tab = FilterTab(self.config_manager, self)
         self.filter_tab.setObjectName("filterInterface")
         self.addSubInterface(self.filter_tab, FIF.FILTER, "Filter & Kata Kunci")
 
-        # 3. Tab Pengaturan AI & Voice
+        # 4. Tab Pengaturan AI & Voice
         self.settings_tab = SettingsTab(self.config_manager, self)
         self.settings_tab.setObjectName("settingsInterface")
         self.addSubInterface(self.settings_tab, FIF.SETTING, "AI & Voice (TTS)")
 
-        # 4. Tab Log
+        # 5. Tab Log
         self.log_tab = LogTab(self)
         self.log_tab.setObjectName("logInterface")
         self.addSubInterface(self.log_tab, FIF.DOCUMENT, "Log Sistem", NavigationItemPosition.BOTTOM)
@@ -80,6 +86,9 @@ class MainWindow(FluentWindow):
         self.tts_engine.finished_speaking.connect(self._on_speech_finished)
         self.tts_engine.queue_changed.connect(self.live_tab.update_queue_count)
         self.tts_engine.error_occurred.connect(lambda err: self.log_tab.log("ERROR", err))
+
+        # Scope Tab signals
+        self.scope_tab.save_requested.connect(self.live_tab.update_ai_mode_badge)
 
         # Settings Tab signals
         self.settings_tab.save_requested.connect(self.live_tab.update_ai_mode_badge)

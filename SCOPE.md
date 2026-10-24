@@ -204,7 +204,7 @@ ATURAN:
 
 ---
 
-## 6. UI APLIKASI (4 TAB)
+## 6. UI APLIKASI (5 TAB)
 
 ### Tab 1: Live Monitor (`live_tab.py`)
 - Input username TikTok + tombol Hubungkan/Putuskan
@@ -213,27 +213,29 @@ ATURAN:
 - Kontrol suara: Skip, Kosongkan Antrean, Mute
 - Tabel feed real-time: Waktu, Tipe, Penonton, Pesan, Balasan Voice AI, Status
 
-### Tab 2: Filter & Kata Kunci (`filter_tab.py`)
+### Tab 2: Scope AI (`scope_tab.py`)
+- Topik / Fokus Live Streaming (`scope_topic`)
+- Batasan maksimal kata per balasan (`scope_max_words`)
+- Informasi & katalog detail produk yang dijual (`scope_store_info`)
+- Saklar aturan ketat Jajan/DM (`scope_strict_dm`)
+- Saklar fokus tetap pada topik live (`scope_strict_topic`)
+- Saklar larangan emoji & markdown (`scope_no_emoji`)
+- Aturan tambahan & larangan khusus host (`scope_custom_rules`)
+
+### Tab 3: Filter & Kata Kunci (`filter_tab.py`)
 - Toggle balas komentar otomatis
 - Mode penyaringan: Balas semua / Hanya kata kunci whitelist
 - Daftar whitelist & blacklist (pisahkan dengan koma)
 - Tabel custom triggers: Kata kunci → Respons otomatis
 
-### Tab 3: AI & Voice TTS (`settings_tab.py`)
+### Tab 4: AI & Voice TTS (`settings_tab.py`)
 - Pilihan provider AI: Gemini / Mode Cerdas Lokal
 - Gemini API Key & model selector
 - System prompt (instruksi persona AI)
-- **Kartu Scope & Aturan AI (AI Scope)**:
-  - Topik / Fokus Live Streaming
-  - Batasan maksimal kata per balasan (SpinBox)
-  - Saklar aturan ketat Jajan/DM
-  - Saklar fokus tetap pada topik live
-  - Saklar larangan emoji & markdown
-  - Input teks aturan tambahan / larangan khusus (Custom Rules)
 - Pilihan suara TTS + pengaturan rate/pitch/volume
 - Simulasi uji komentar & join
 
-### Tab 4: Log Sistem (`log_tab.py`)
+### Tab 5: Log Sistem (`log_tab.py`)
 - Catatan semua aktivitas: koneksi, komentar, sapaan, error
 
 ---
