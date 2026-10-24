@@ -106,11 +106,12 @@ class MainWindow(FluentWindow):
             self.tiktok_worker.stop()
             self.tiktok_worker.wait()
 
+        self._was_connected = False
         self.log_tab.log("INFO", f"Mencoba menghubungkan ke live TikTok @{username}...")
         self.tiktok_worker = TikTokWorker(username, self.ai_engine, self.config_manager, self)
         self.tiktok_worker.connected.connect(self._on_worker_connected)
         self.tiktok_worker.disconnected.connect(self._on_worker_disconnected)
-        self.tiktok_worker.status_changed.connect(lambda msg: self.log_tab.log("INFO", msg))
+        self.tiktok_worker.status_changed.connect(self._on_worker_status_changed)
         self.tiktok_worker.comment_received.connect(self._on_comment_received)
         self.tiktok_worker.join_received.connect(self._on_join_received)
         self.tiktok_worker.error_occurred.connect(self._on_worker_error)
@@ -118,29 +119,42 @@ class MainWindow(FluentWindow):
         self.tiktok_worker.start()
 
     def _stop_tiktok_stream(self):
+        self._was_connected = False
         if self.tiktok_worker and self.tiktok_worker.isRunning():
             self.log_tab.log("INFO", "Menghentikan koneksi live streaming...")
             self.tiktok_worker.stop()
             self.tiktok_worker.wait(2000)
         self.live_tab.set_connected_state(False)
 
+    def _on_worker_status_changed(self, msg: str):
+        self.log_tab.log("INFO", msg)
+        if "menyambungkan" in msg.lower() or "terputus" in msg.lower():
+            self.live_tab.set_reconnecting_state(msg)
+
     def _on_worker_connected(self, username: str):
+        first_time = not self._was_connected
+        self._was_connected = True
         self.live_tab.set_connected_state(True, username)
-        self.log_tab.log("SUCCESS", f"Berhasil tersambung ke live @{username}")
-        InfoBar.success(
-            title="Tersambung",
-            content=f"Berhasil terhubung ke live streaming TikTok @{username}",
-            orient=Qt.Orientation.Horizontal,
-            position=InfoBarPosition.TOP,
-            duration=3500,
-            parent=self.live_tab
-        )
+        if first_time:
+            self.log_tab.log("SUCCESS", f"Berhasil tersambung ke live @{username}")
+            InfoBar.success(
+                title="Tersambung",
+                content=f"Berhasil terhubung ke live streaming TikTok @{username}",
+                orient=Qt.Orientation.Horizontal,
+                position=InfoBarPosition.TOP,
+                duration=3500,
+                parent=self.live_tab
+            )
+        else:
+            self.log_tab.log("SUCCESS", f"Berhasil tersambung kembali (auto-reconnected) ke live @{username}")
 
     def _on_worker_disconnected(self):
+        self._was_connected = False
         self.live_tab.set_connected_state(False)
         self.log_tab.log("INFO", "Koneksi live telah diputus.")
 
     def _on_worker_error(self, err_msg: str):
+        self._was_connected = False
         self.live_tab.set_connected_state(False, status_detail=f"Offline: {err_msg}")
         self.log_tab.log("ERROR", err_msg)
         InfoBar.error(

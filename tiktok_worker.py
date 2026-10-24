@@ -239,7 +239,7 @@ class TikTokWorker(QThread):
         self._is_running = False
         if self.client:
             try:
-                loop = getattr(self.client, "_loop", None)
+                loop = getattr(self.client, "_asyncio_loop", None) or getattr(self.client, "_loop", None)
                 if loop and loop.is_running():
                     asyncio.run_coroutine_threadsafe(self.client.disconnect(), loop)
             except Exception as e:
@@ -252,8 +252,10 @@ class TikTokWorker(QThread):
             self.disconnected.emit()
             return
 
+        self._is_running = True
         self.last_error_message = None
-        self.status_changed.emit(f"Menghubungkan ke live @{self.username}...")
+        consecutive_failures = 0
+        known_room_id = int(self.username) if self.username.isdigit() else None
 
         # Browser headers untuk mencegah WAF bot-blocking TikTok
         custom_headers = {
@@ -263,169 +265,208 @@ class TikTokWorker(QThread):
             "Referer": "https://www.tiktok.com/"
         }
 
-        try:
-            self.client = TikTokLiveClient(
-                unique_id=self.username,
-                web_kwargs={"httpx_kwargs": {"headers": custom_headers}}
-            )
+        # === LOOP AUTO-RECONNECT OTOMATIS JIKA KONEKSI TIKTOK TERPUTUS SEMENTARA ===
+        while self._is_running:
+            self.status_changed.emit(f"Menghubungkan ke live @{self.username}...")
+            is_live_ended = False
 
-            @self.client.on(ConnectEvent)
-            async def on_connect(event: ConnectEvent):
-                self.connect_time = time.time()
-                self.connected.emit(self.username)
-                self.status_changed.emit(f"Terkoneksi ke live @{self.username}")
-                print(f"[TikTokWorker] Berhasil tersambung ke live @{self.username} pada epoch {self.connect_time}")
+            try:
+                self.client = TikTokLiveClient(
+                    unique_id=self.username,
+                    web_kwargs={"httpx_kwargs": {"headers": custom_headers}}
+                )
 
-            @self.client.on(DisconnectEvent)
-            async def on_disconnect(event: DisconnectEvent):
-                self.disconnected.emit()
-                self.status_changed.emit("Koneksi live terputus")
+                @self.client.on(ConnectEvent)
+                async def on_connect(event: ConnectEvent):
+                    nonlocal known_room_id, consecutive_failures
+                    consecutive_failures = 0
+                    self.connect_time = time.time()
+                    if getattr(self.client, "room_id", None):
+                        known_room_id = self.client.room_id
+                    self.connected.emit(self.username)
+                    self.status_changed.emit(f"Terkoneksi ke live @{self.username}")
+                    print(f"[TikTokWorker] Berhasil tersambung ke live @{self.username} (Room ID: {getattr(self.client, 'room_id', known_room_id)})")
 
-            @self.client.on(LiveEndEvent)
-            async def on_live_end(event: LiveEndEvent):
-                self.status_changed.emit(f"Live streaming @{self.username} telah berakhir")
-                self.disconnected.emit()
+                @self.client.on(DisconnectEvent)
+                async def on_disconnect(event: DisconnectEvent):
+                    # Jika disconnect sementara dari server TikTok dan user tidak menekan stop, persiapkan auto-reconnect
+                    if self._is_running and not is_live_ended:
+                        print(f"[TikTokWorker] Sinyal Disconnect dari TikTok (reset koneksi). Mempersiapkan reconnect otomatis...")
 
-            @self.client.on(CommentEvent)
-            async def on_comment(event: CommentEvent):
-                if not self._is_running:
-                    return
+                @self.client.on(LiveEndEvent)
+                async def on_live_end(event: LiveEndEvent):
+                    nonlocal is_live_ended
+                    is_live_ended = True
+                    self._is_running = False
+                    self.status_changed.emit(f"Live streaming @{self.username} telah berakhir")
+                    print(f"[TikTokWorker] Siaran live @{self.username} telah diakhiri oleh streamer.")
 
-                try:
-                    user_obj = getattr(event, "user", None)
-                    username = "Penonton"
-                    if user_obj:
-                        username = (
-                            getattr(user_obj, "nick_name", None) or
-                            getattr(user_obj, "nickname", None) or
-                            getattr(user_obj, "unique_id", None) or
-                            "Penonton"
-                        )
-
-                    comment_text = getattr(event, "comment", None) or getattr(event, "content", "") or ""
-                    comment_text = str(comment_text).strip()
-
-                    if not comment_text:
+                @self.client.on(CommentEvent)
+                async def on_comment(event: CommentEvent):
+                    if not self._is_running:
                         return
 
-                    # === FILTER REAL-TIME: KOMENTAR > 5 MENIT JANGAN DIAMBIL & DIBALAS ===
-                    now = time.time()
-                    comment_timestamp = None
+                    try:
+                        user_obj = getattr(event, "user", None)
+                        username = "Penonton"
+                        if user_obj:
+                            username = (
+                                getattr(user_obj, "nick_name", None) or
+                                getattr(user_obj, "nickname", None) or
+                                getattr(user_obj, "unique_id", None) or
+                                "Penonton"
+                            )
 
-                    # 1. Ambil waktu pembuatan dari common protobuf
-                    common = getattr(event, "common", None)
-                    if common:
-                        raw_ts = getattr(common, "create_time", 0) or getattr(common, "client_send_time", 0)
-                        if raw_ts and raw_ts > 0:
-                            comment_timestamp = (raw_ts / 1000.0) if raw_ts > 1e11 else float(raw_ts)
+                        comment_text = getattr(event, "comment", None) or getattr(event, "content", "") or ""
+                        comment_text = str(comment_text).strip()
 
-                    # 2. Ambil dari screen_time jika belum didapat
-                    if not comment_timestamp:
-                        s_time = getattr(event, "screen_time", 0)
-                        if s_time and s_time > 0:
-                            comment_timestamp = (s_time / 1000.0) if s_time > 1e11 else float(s_time)
-
-                    # Evaluasi selisih waktu
-                    if comment_timestamp and comment_timestamp > 0:
-                        age_sec = now - comment_timestamp
-                        # Lewat minimal 5 menit (300 detik)
-                        if age_sec > 300:
-                            print(f"[TikTokWorker] Komentar kadaluarsa ({int(age_sec)}s lalu) dilewati: '{comment_text}' dari {username}")
-                            self.comment_received.emit(username, comment_text, f"(Dilewati: Komentar usang > 5 menit lalu)", False)
+                        if not comment_text:
                             return
 
-                        # Jika komentar terjadi jauh sebelum bot tersambung (> 30 detik sebelum connect)
-                        if self.connect_time > 0 and comment_timestamp < (self.connect_time - 30):
-                            print(f"[TikTokWorker] Komentar sebelum bot online dilewati: '{comment_text}' dari {username}")
-                            self.comment_received.emit(username, comment_text, f"(Dilewati: Komentar sebelum bot terhubung)", False)
+                        # === FILTER REAL-TIME: KOMENTAR > 5 MENIT JANGAN DIAMBIL & DIBALAS ===
+                        now = time.time()
+                        comment_timestamp = None
+
+                        # 1. Ambil waktu pembuatan dari common protobuf
+                        common = getattr(event, "common", None)
+                        if common:
+                            raw_ts = getattr(common, "create_time", 0) or getattr(common, "client_send_time", 0)
+                            if raw_ts and raw_ts > 0:
+                                comment_timestamp = (raw_ts / 1000.0) if raw_ts > 1e11 else float(raw_ts)
+
+                        # 2. Ambil dari screen_time jika belum didapat
+                        if not comment_timestamp:
+                            s_time = getattr(event, "screen_time", 0)
+                            if s_time and s_time > 0:
+                                comment_timestamp = (s_time / 1000.0) if s_time > 1e11 else float(s_time)
+
+                        # Evaluasi selisih waktu
+                        if comment_timestamp and comment_timestamp > 0:
+                            age_sec = now - comment_timestamp
+                            # Lewat minimal 5 menit (300 detik)
+                            if age_sec > 300:
+                                print(f"[TikTokWorker] Komentar kadaluarsa ({int(age_sec)}s lalu) dilewati: '{comment_text}' dari {username}")
+                                self.comment_received.emit(username, comment_text, f"(Dilewati: Komentar usang > 5 menit lalu)", False)
+                                return
+
+                            # Jika komentar terjadi jauh sebelum bot tersambung (> 30 detik sebelum connect)
+                            if self.connect_time > 0 and comment_timestamp < (self.connect_time - 30):
+                                print(f"[TikTokWorker] Komentar sebelum bot online dilewati: '{comment_text}' dari {username}")
+                                self.comment_received.emit(username, comment_text, f"(Dilewati: Komentar sebelum bot terhubung)", False)
+                                return
+
+                        if not self.config.get("enable_comments", True):
+                            self.comment_received.emit(username, comment_text, "(Fitur balas komentar dinonaktifkan)", False)
                             return
 
-                    if not self.config.get("enable_comments", True):
-                        self.comment_received.emit(username, comment_text, "(Fitur balas komentar dinonaktifkan)", False)
+                        # Evaluasi komentar oleh AI Engine
+                        should_reply, reason, direct_reply = self.ai.should_reply(comment_text)
+
+                        if should_reply:
+                            reply_text = self.ai.generate_reply(username, comment_text, direct_reply)
+                            self.comment_received.emit(username, comment_text, reply_text, True)
+                        else:
+                            self.comment_received.emit(username, comment_text, f"(Dilewati: {reason})", False)
+                    except Exception as ex:
+                        print(f"[TikTokWorker] Error processing comment: {ex}")
+
+                @self.client.on(JoinEvent)
+                async def on_join(event: JoinEvent):
+                    if not self._is_running:
                         return
 
-                    # Evaluasi komentar oleh AI Engine
-                    should_reply, reason, direct_reply = self.ai.should_reply(comment_text)
+                    try:
+                        user_obj = getattr(event, "user", None)
+                        username = "Kawan"
+                        if user_obj:
+                            username = (
+                                getattr(user_obj, "nick_name", None) or
+                                getattr(user_obj, "nickname", None) or
+                                getattr(user_obj, "unique_id", None) or
+                                "Kawan"
+                            )
 
-                    if should_reply:
-                        reply_text = self.ai.generate_reply(username, comment_text, direct_reply)
-                        self.comment_received.emit(username, comment_text, reply_text, True)
-                    else:
-                        self.comment_received.emit(username, comment_text, f"(Dilewati: {reason})", False)
-                except Exception as ex:
-                    print(f"[TikTokWorker] Error processing comment: {ex}")
+                        if not self.config.get("enable_greetings", True):
+                            return
 
-            @self.client.on(JoinEvent)
-            async def on_join(event: JoinEvent):
+                        # Cek duplikat user
+                        if username in self.greeted_users:
+                            return
+
+                        # Cek jeda cooldown sapaan
+                        now = time.time()
+                        cooldown = self.config.get("greeting_cooldown_sec", 5)
+                        if (now - self.last_greeting_time) < cooldown:
+                            return
+
+                        self.last_greeting_time = now
+                        self.greeted_users.add(username)
+                        if len(self.greeted_users) > 500:
+                            self.greeted_users.clear()
+
+                        greeting_text = self.ai.generate_greeting(username)
+                        self.join_received.emit(username, greeting_text, True)
+                    except Exception as ex:
+                        print(f"[TikTokWorker] Error processing join: {ex}")
+
+                # Jalankan client TikTok:
+                # - process_connect_events=False: agar tidak memproses event backlog lama saat join
+                # - fetch_live_check=False: lewati check_alive bawaan yang sering bug
+                run_kwargs = {
+                    "process_connect_events": False,
+                    "fetch_live_check": False
+                }
+                if known_room_id:
+                    run_kwargs["room_id"] = int(known_room_id)
+
+                self.client.run(**run_kwargs)
+
+            except UserOfflineError:
+                if is_live_ended or not known_room_id:
+                    self.last_error_message = f"Pengguna @{self.username} sedang tidak melakukan live streaming (Offline)."
+                    self.error_occurred.emit(self.last_error_message)
+                    self._is_running = False
+                    break
+                else:
+                    # Mungkin room_id sebelumnya telah berganti, coba cari ulang
+                    known_room_id = None
+            except UserNotFoundError:
+                self.last_error_message = f"Username @{self.username} tidak ditemukan di TikTok."
+                self.error_occurred.emit(self.last_error_message)
+                self._is_running = False
+                break
+            except TikTokLiveError as e:
+                err_str = str(e)
+                print(f"[TikTokWorker] TikTokLive notice: {err_str}")
+            except Exception as e:
+                err_str = str(e)
+                print(f"[TikTokWorker] Runtime notice: {err_str}")
+                if "UserOfflineError" in err_str:
+                    known_room_id = None
+
+            # Jika live streaming diakhiri secara normal atau user menghentikan secara manual
+            if is_live_ended or not self._is_running:
+                break
+
+            # AUTO-RECONNECT: Terputus sementara dari server TikTok, sambungkan ulang otomatis
+            consecutive_failures += 1
+            if consecutive_failures > 15:
+                self.last_error_message = f"Koneksi ke live @{self.username} terputus berulang kali."
+                self.error_occurred.emit(self.last_error_message)
+                break
+
+            retry_wait = min(2 * consecutive_failures, 8)
+            self.status_changed.emit(f"Koneksi terputus. Menyambungkan kembali dalam {retry_wait}s ({consecutive_failures})...")
+            print(f"[TikTokWorker] Mencoba menyambung kembali otomatis ke @{self.username} dalam {retry_wait}s (percobaan {consecutive_failures})...")
+
+            for _ in range(int(retry_wait * 2)):
                 if not self._is_running:
-                    return
+                    break
+                time.sleep(0.5)
 
-                try:
-                    user_obj = getattr(event, "user", None)
-                    username = "Kawan"
-                    if user_obj:
-                        username = (
-                            getattr(user_obj, "nick_name", None) or
-                            getattr(user_obj, "nickname", None) or
-                            getattr(user_obj, "unique_id", None) or
-                            "Kawan"
-                        )
-
-                    if not self.config.get("enable_greetings", True):
-                        return
-
-                    # Cek duplikat user
-                    if username in self.greeted_users:
-                        return
-
-                    # Cek jeda cooldown sapaan
-                    now = time.time()
-                    cooldown = self.config.get("greeting_cooldown_sec", 5)
-                    if (now - self.last_greeting_time) < cooldown:
-                        return
-
-                    self.last_greeting_time = now
-                    self.greeted_users.add(username)
-                    if len(self.greeted_users) > 500:
-                        self.greeted_users.clear()
-
-                    greeting_text = self.ai.generate_greeting(username)
-                    self.join_received.emit(username, greeting_text, True)
-                except Exception as ex:
-                    print(f"[TikTokWorker] Error processing join: {ex}")
-
-            # Jalankan client TikTok:
-            # - process_connect_events=False: agar tidak memproses event backlog lama saat join
-            # - fetch_live_check=False: lewati check_alive TikTok yang sering bug mengembalikan status offline
-            run_kwargs = {
-                "process_connect_events": False,
-                "fetch_live_check": False
-            }
-            if self.username.isdigit():
-                run_kwargs["room_id"] = int(self.username)
-            self.client.run(**run_kwargs)
-
-        except UserOfflineError:
-            self.last_error_message = f"Pengguna @{self.username} sedang tidak melakukan live streaming (Offline)."
-            self.error_occurred.emit(self.last_error_message)
-        except UserNotFoundError:
-            self.last_error_message = f"Username @{self.username} tidak ditemukan di TikTok."
-            self.error_occurred.emit(self.last_error_message)
-        except TikTokLiveError as e:
-            self.last_error_message = f"Kesalahan TikTokLive: {str(e)}"
-            self.error_occurred.emit(self.last_error_message)
-        except Exception as e:
-            err_str = str(e)
-            if "UserOfflineError" in err_str or "offline" in err_str.lower():
-                self.last_error_message = f"Pengguna @{self.username} sedang tidak live (Offline)."
-            elif isinstance(e, json.JSONDecodeError) or "Expecting value" in err_str:
-                self.last_error_message = f"TikTok membatasi akses sementara (Rate limit / WAF). Coba beberapa saat lagi atau masukkan Room ID langsung."
-            else:
-                self.last_error_message = f"Gagal koneksi live @{self.username}: {err_str}"
-            self.error_occurred.emit(self.last_error_message)
-        finally:
-            self.disconnected.emit()
-            if self.last_error_message:
-                self.status_changed.emit(f"Offline ({self.last_error_message})")
-            else:
-                self.status_changed.emit("Status: Offline")
+        # Keluar loop: proses live selesai sepenuhnya
+        self.disconnected.emit()
+        if self.last_error_message:
+            self.status_changed.emit(f"Offline ({self.last_error_message})")
+        else:
+            self.status_changed.emit("Status: Offline")

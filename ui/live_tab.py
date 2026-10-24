@@ -169,6 +169,10 @@ class LiveTab(QWidget):
             self.lbl_status.setStyleSheet("color: #e74c3c; font-weight: bold; font-size: 13px;")
             self.input_username.setEnabled(True)
 
+    def set_reconnecting_state(self, message: str):
+        self.lbl_status.setText(f"Status: {message}")
+        self.lbl_status.setStyleSheet("color: #f39c12; font-weight: bold; font-size: 13px;")
+
     def set_speaking_status(self, username: str, text: str):
         if text:
             self.lbl_now_speaking.setText(f"Sedang Berbicara (Untuk: {username})")
