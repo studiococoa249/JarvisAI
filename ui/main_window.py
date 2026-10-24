@@ -9,7 +9,7 @@ from qfluentwidgets import (
 from config_manager import ConfigManager
 from ai_engine import AIEngine
 from tts_engine import TTSEngine
-from tiktok_worker import TikTokWorker
+from tiktok_worker import TikTokWorker, sanitize_tiktok_username
 from ui.live_tab import LiveTab
 from ui.scope_tab import ScopeTab
 from ui.settings_tab import SettingsTab
@@ -101,7 +101,12 @@ class MainWindow(FluentWindow):
         self.filter_tab.save_requested.connect(self.live_tab.update_ai_mode_badge)
 
     # --- TIKTOK STREAM CONNECTION ---
-    def _start_tiktok_stream(self, username: str):
+    def _start_tiktok_stream(self, raw_username: str):
+        username = sanitize_tiktok_username(raw_username)
+        if not username:
+            self._on_worker_error("Username TikTok kosong atau format tidak valid.")
+            return
+
         if self.tiktok_worker and self.tiktok_worker.isRunning():
             self.tiktok_worker.stop()
             self.tiktok_worker.wait()
