@@ -1,0 +1,61 @@
+{
+    "tiktok_username": "@oreogucci",
+    "ai_provider": "gemini",
+    "gemini_api_key": "",
+    "gemini_model": "gemini-3.5-flash-lite",
+    "scope_topic": "Jualan & Spill Produk (Keranjang Kuning)",
+    "scope_max_words": 15,
+    "scope_strict_dm": true,
+    "scope_strict_topic": true,
+    "scope_no_emoji": true,
+    "scope_custom_rules": "",
+    "ai_system_prompt": "Kamu asisten host live streaming TikTok yang ramah, santai, dan cerdas. Balas komentar penonton sesuai persis dengan apa yang mereka ketik secara relevan dan nyambung. ATURAN: 1. Balaslah nyambung sesuai topik yang diketik penonton. 2. HANYA tawarkan jajan lewat DM JIKA penonton secara jelas bertanya ingin membeli, memesan, atau menanyakan harga barang. 3. JANGAN tawarkan jajan atau DM jika penonton hanya menyapa atau mengetik kata singkat seperti aku, alu, ka, halo, kenal deh. Balaslah santai (contoh: 'Iya halo kak, kenapa nih?'). 4. Jangan baca tanda garis bawah (_) atau huruf berulang pada username. 5. Maksimal 1 kalimat singkat (di bawah 15 kata), bahasa Indonesia natural tanpa emoji.",
+    "tts_voice": "id-ID-ArdiNeural",
+    "tts_rate": "+0%",
+    "tts_pitch": "+9Hz",
+    "tts_volume": "+0%",
+    "enable_comments": true,
+    "enable_greetings": true,
+    "greeting_cooldown_sec": 1,
+    "greeting_template": "Halo kak {username}, selamat datang di live!",
+    "greeting_use_ai": true,
+    "reply_mode": "all",
+    "whitelist_keywords": [
+        "halo",
+        "bg",
+        "bang",
+        "beli",
+        "jajan",
+        "dds",
+        "kode"
+    ],
+    "blacklist_keywords": [
+        "kontol",
+        "memek",
+        "anjing",
+        "babi",
+        "bangsat",
+        "tolol",
+        "scam",
+        "bodoh"
+    ],
+    "custom_triggers": [
+        {
+            "keyword": "bg",
+            "response": "halo, {username} ada apa bang?"
+        },
+        {
+            "keyword": "bang",
+            "response": "halo, halo, {username} ada apa?"
+        },
+        {
+            "keyword": "halo bang",
+            "response": "Halo {username} ada apa?"
+        },
+        {
+            "keyword": "beli",
+            "response": "bang {username} DM aja kalo mau jajan"
+        }
+    ],
+    "max_queue_size": 15
+}
