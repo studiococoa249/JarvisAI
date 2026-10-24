@@ -1,4 +1,5 @@
 import os
+import time
 import uuid
 import wave
 import asyncio
@@ -106,8 +107,10 @@ class TTSEngine(QObject):
         # Qt Media Player setup
         self.player = QMediaPlayer()
         self.audio_output = QAudioOutput()
+        self.audio_output.setVolume(1.0)
         self.player.setAudioOutput(self.audio_output)
         self.player.mediaStatusChanged.connect(self._on_media_status_changed)
+        self.player.errorOccurred.connect(self._on_player_error)
 
     def _get_gemini_client(self):
         key = self.config.get("gemini_api_key", "").strip()
@@ -325,6 +328,12 @@ class TTSEngine(QObject):
             self._cleanup_current_file()
             self._process_next()
 
+    @Slot(QMediaPlayer.Error, str)
+    def _on_player_error(self, error, error_string):
+        print(f"[TTSEngine] Media Player error ({error}): {error_string}")
+        self._cleanup_current_file()
+        self._process_next()
+
     def skip_current(self):
         """Melewati audio yang sedang berbicara saat ini."""
         if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
@@ -343,6 +352,10 @@ class TTSEngine(QObject):
         self.finished_speaking.emit()
 
     def _cleanup_current_file(self):
+        try:
+            self.player.setSource(QUrl())
+        except Exception:
+            pass
         if self.current_audio_file and os.path.exists(self.current_audio_file):
             try:
                 os.remove(self.current_audio_file)

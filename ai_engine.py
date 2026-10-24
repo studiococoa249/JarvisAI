@@ -253,8 +253,7 @@ class AIEngine:
         ]
         seen = set()
         clean_models = [m for m in models_to_try if m and not (m in seen or seen.add(m))]
-
-        max_tokens = max(50, max_words * 5)
+        max_tokens = 100
         for m_name in clean_models:
             try:
                 response = self._gemini_client.models.generate_content(
