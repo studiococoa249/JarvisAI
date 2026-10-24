@@ -81,6 +81,12 @@ class ConfigManager:
         if merged.get("gemini_model") in ["gemini-2.5-flash", "gemini-1.5-flash"]:
             merged["gemini_model"] = "gemini-3.5-flash-lite"
 
+        # Migrasi jika tts_voice adalah suara Gemini TTS (kuota terbatas) ke suara Edge-TTS stabil
+        if merged.get("tts_voice") in ["gemini_Kore", "gemini"]:
+            merged["tts_voice"] = "id-ID-GadisNeural"
+        elif merged.get("tts_voice") == "gemini_Puck":
+            merged["tts_voice"] = "id-ID-ArdiNeural"
+
         return merged
 
     def save(self):

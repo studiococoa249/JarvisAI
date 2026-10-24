@@ -193,11 +193,18 @@ class MainWindow(FluentWindow):
 
     # --- TESTING TOOLS ---
     def _test_voice(self, voice_id: str, rate: str, pitch: str, volume: str):
+        # Sinkronkan pilihan suara dan slider ke config agar suara live PERSIS sama
+        self.config.set("tts_voice", voice_id)
+        self.config.set("tts_rate", rate)
+        self.config.set("tts_pitch", pitch)
+        self.config.set("tts_volume", volume)
+        self.config.save()
+
         if "child" in voice_id or "toddler" in voice_id:
             sample_text = "Halo om dan tante! Selamat datang di live ya, jangan lupa tap-tap layar!"
         else:
             sample_text = "Halo semuanya! Selamat datang di siaran live streaming kami, selamat berbelanja ya!"
-        self.log_tab.log("TEST", f"Menguji suara ({voice_id})...")
+        self.log_tab.log("TEST", f"Menguji suara ({voice_id}) dengan kecepatan {rate} dan nada {pitch}...")
         self.tts_engine.add_to_queue("Preview", sample_text, source="Uji Suara", voice_id=voice_id)
 
     def _test_ai_connection(self, provider: str, api_key: str, model: str):

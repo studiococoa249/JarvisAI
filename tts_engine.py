@@ -12,10 +12,10 @@ from google import genai
 from google.genai import types
 
 AVAILABLE_VOICES = [
-    # === SUARA DEWASA (ADULT VOICES) ===
+    # === SUARA DEWASA (ADULT VOICES - NATURAL & UNLIMITED) ===
     {
         "id": "id-ID-GadisNeural",
-        "name": "👩 Gadis (Wanita Dewasa - Indonesia Alami)",
+        "name": "👩 Gadis (Wanita Dewasa - Indonesia Alami, Jernih & Ramah)",
         "category": "dewasa",
         "engine": "edge",
         "voice_base": "id-ID-GadisNeural",
@@ -24,7 +24,7 @@ AVAILABLE_VOICES = [
     },
     {
         "id": "id-ID-ArdiNeural",
-        "name": "👨 Ardi (Pria Dewasa - Indonesia Alami)",
+        "name": "👨 Ardi (Pria Dewasa - Indonesia Alami, Bass Hangat & Jelas)",
         "category": "dewasa",
         "engine": "edge",
         "voice_base": "id-ID-ArdiNeural",
@@ -32,23 +32,21 @@ AVAILABLE_VOICES = [
         "gender": "Male"
     },
     {
-        "id": "gemini_Kore",
-        "name": "🌟 Kore (Wanita Dewasa - Gemini Real Human)",
+        "id": "jv-ID-SitiNeural",
+        "name": "🧕 Siti (Wanita - Logat Daerah Lembut & Santun)",
         "category": "dewasa",
-        "engine": "gemini",
-        "voice_preset": "Kore",
+        "engine": "edge",
+        "voice_base": "jv-ID-SitiNeural",
         "formant_shift": None,
-        "prompt_style": "Ucapkan dengan sangat ramah, hangat, dan natural seperti wanita dewasa host live streaming: ",
         "gender": "Female"
     },
     {
-        "id": "gemini_Puck",
-        "name": "🌟 Puck (Pria Dewasa - Gemini Real Human)",
+        "id": "jv-ID-DimasNeural",
+        "name": "🧔 Dimas (Pria - Logat Daerah Santai & Akrab)",
         "category": "dewasa",
-        "engine": "gemini",
-        "voice_preset": "Puck",
+        "engine": "edge",
+        "voice_base": "jv-ID-DimasNeural",
         "formant_shift": None,
-        "prompt_style": "Ucapkan dengan santai, asyik, dan ramah seperti pria dewasa host live streaming: ",
         "gender": "Male"
     },
 
@@ -83,6 +81,9 @@ AVAILABLE_VOICES = [
 ]
 
 VOICE_MAP = {v["id"]: v for v in AVAILABLE_VOICES}
+# Backward compatibility aliases
+VOICE_MAP["gemini_Kore"] = VOICE_MAP["id-ID-GadisNeural"]
+VOICE_MAP["gemini_Puck"] = VOICE_MAP["id-ID-ArdiNeural"]
 
 class TTSEngine(QObject):
     started_speaking = Signal(str, str)   # (username, text)
@@ -239,7 +240,7 @@ class TTSEngine(QObject):
                 # 1. Hasilkan suara dasar Edge-TTS ke file sementara
                 raw_temp = os.path.join(self.temp_dir, f"raw_edge_{uuid.uuid4().hex[:6]}.mp3")
                 async def _speak():
-                    comm = edge_tts.Communicate(text=text, voice=voice_base, rate="+10%")
+                    comm = edge_tts.Communicate(text=text, voice=voice_base, rate=rate)
                     await comm.save(raw_temp)
 
                 asyncio.run(_speak())
