@@ -228,38 +228,11 @@ class AIEngine:
             "Kamu adalah asisten host live streaming TikTok yang ramah, santai, dan cerdas."
         ).strip()
 
-        topic = self.config.get("scope_topic", "Jualan & Spill Produk (Keranjang Kuning)").strip()
-        store_info = self.config.get("scope_store_info", "").strip()
-        max_words = int(self.config.get("scope_max_words", 15))
-        strict_dm = self.config.get("scope_strict_dm", True)
-        strict_topic = self.config.get("scope_strict_topic", True)
-        no_emoji = self.config.get("scope_no_emoji", True)
-        custom_rules = self.config.get("scope_custom_rules", "").strip()
-
-        rules = [
-            f"Fokus / Topik Live Streaming: {topic}.",
-            f"Panjang balasan: Maksimal 1 kalimat singkat (di bawah {max_words} kata) bahasa Indonesia natural.",
-            "Balaslah SESUAI PERSIS dan nyambung dengan topik yang diketik penonton."
-        ]
-
-        if store_info:
-            rules.append(f"Informasi Toko / Produk yang Dijual:\n{store_info}")
-
-        if strict_dm:
-            rules.append("HANYA tawarkan jajan/order lewat DM JIKA penonton secara jelas bertanya mau beli, harga, promo, atau memesan barang.")
-            rules.append("JANGAN PERNAH menawarkan jajan atau DM jika komentar bukan tentang pembelian (misal cuma 'aku', 'alu', 'ka', 'halo', 'kenal deh')!")
-
-        if strict_topic:
-            rules.append("Tetap fokus pada topik live streaming. Jika pertanyaan di luar konteks/melenceng, tanggapi dengan ramah dan ajak kembali ke topik live.")
-
-        if no_emoji:
-            rules.append("DILARANG menggunakan emoji, simbol aneh, formatting markdown (**bold**, *italic*), atau tanda petik di output agar suara TTS jernih.")
-
-        if custom_rules:
-            rules.append(f"Aturan Tambahan Scope Host:\n{custom_rules}")
-
-        scope_instructions = "\n".join(f"- {r}" for r in rules)
-        system_instruction = f"{base_prompt}\n\nATURAN RUANG LINGKUP & BATASAN (SCOPE AI):\n{scope_instructions}"
+        scope_ai_text = self.config.get("scope_ai_text", "").strip()
+        if scope_ai_text:
+            system_instruction = f"{base_prompt}\n\nPANDUAN & RUANG LINGKUP LIVE (SCOPE AI):\n{scope_ai_text}"
+        else:
+            system_instruction = base_prompt
 
         extra_note = ""
         if assisted_context:
@@ -268,7 +241,7 @@ class AIEngine:
         prompt = (
             f"Penonton TikTok Live bernama '{clean_user}' berkomentar: \"{comment}\"\n"
             f"{extra_note}"
-            f"Tugas: Berikan 1 kalimat balasan langsung (maksimal {max_words} kata) sesuai aturan scope di atas tanpa awalan penjelasan."
+            f"Tugas: Berikan 1 kalimat balasan langsung (maksimal 15 kata, bahasa Indonesia natural santai) sesuai Scope AI di atas tanpa awalan penjelasan."
         )
 
         models_to_try = [

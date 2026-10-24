@@ -3,18 +3,29 @@ import json
 
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 
+DEFAULT_SCOPE_TEXT = (
+    "FOKUS & TOPIK LIVE:\n"
+    "- Jualan & Spill Produk di Keranjang Kuning\n"
+    "- Fashion Pria & Wanita (Pakaian, Jaket, Celana, Aksesoris)\n\n"
+    "INFORMASI TOKO & PRODUK:\n"
+    "- Produk etalase No 1 sampai 10 ready stok dan siap dikirim\n"
+    "- Bisa bayar COD ke seluruh Indonesia\n"
+    "- Pengiriman setiap hari kerja jam 4 sore\n\n"
+    "ATURAN BALASAN & BATASAN (SCOPE):\n"
+    "1. Balaslah SESUAI PERSIS dengan apa yang diketik penonton agar nyambung.\n"
+    "2. Maksimal 1 kalimat singkat (di bawah 15 kata), bahasa Indonesia natural santai.\n"
+    "3. HANYA tawarkan jajan lewat DM JIKA penonton secara jelas bertanya mau beli, harga, order, atau pesan barang.\n"
+    "4. JANGAN PERNAH menawarkan jajan atau DM jika komentar bukan tentang pembelian (misal cuma 'aku', 'alu', 'ka', 'halo', 'kenal deh')!\n"
+    "5. DILARANG menggunakan emoji, simbol, atau markdown formatting (**bold**, dsb.) agar suara TTS jernih.\n"
+    "6. Jika penonton berkomentar di luar konteks live, tanggapi dengan sopan dan ajak kembali ke topik live streaming."
+)
+
 DEFAULT_CONFIG = {
     "tiktok_username": "",
     "ai_provider": "gemini",  # "gemini", "smart_rules"
     "gemini_api_key": "",
     "gemini_model": "gemini-3.5-flash-lite",
-    "scope_topic": "Jualan & Spill Produk (Keranjang Kuning)",
-    "scope_store_info": "",
-    "scope_max_words": 15,
-    "scope_strict_dm": True,
-    "scope_strict_topic": True,
-    "scope_no_emoji": True,
-    "scope_custom_rules": "",
+    "scope_ai_text": DEFAULT_SCOPE_TEXT,
     "ai_system_prompt": (
         "Kamu asisten host live streaming TikTok yang ramah, santai, dan cerdas. "
         "Balas komentar penonton sesuai persis dengan apa yang mereka ketik secara relevan dan nyambung. "
