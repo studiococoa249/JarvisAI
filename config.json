@@ -1,5 +1,5 @@
 {
-    "tiktok_username": "@oreogucci",
+    "tiktok_username": "@ridho_maulana16",
     "ai_provider": "gemini",
     "gemini_api_key": "",
     "gemini_model": "gemini-3.5-flash-lite",
@@ -50,6 +50,10 @@
         {
             "keyword": "beli",
             "response": "bang {username} DM aja kalo mau jajan"
+        },
+        {
+            "keyword": "kode",
+            "response": "Sabar, kode segara mimin kirim"
         }
     ],
     "max_queue_size": 15

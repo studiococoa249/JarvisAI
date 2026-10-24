@@ -1,7 +1,19 @@
+import sys
 import time
 import re
 import json
 import asyncio
+
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='backslashreplace')
+    except Exception:
+        pass
+if hasattr(sys.stderr, 'reconfigure'):
+    try:
+        sys.stderr.reconfigure(encoding='utf-8', errors='backslashreplace')
+    except Exception:
+        pass
 from PySide6.QtCore import QThread, Signal
 from TikTokLive import TikTokLiveClient
 from TikTokLive.events import (
@@ -22,24 +34,36 @@ from TikTokLive.client.web.routes.fetch_room_id_live_html import (
 )
 from TikTokLive.client.web.routes.fetch_room_id_api import FetchRoomIdAPIRoute
 
-# === 1. PATCH TIKTOK API ROUTE (TAMBAH aid=1988) ===
+# === 1. PATCH TIKTOK API ROUTE (TAMBAH aid=1988 & SAFE JSON DECODING) ===
 # TikTok mewajibkan parameter aid=1988 pada endpoint /api-live/user/room/.
 # Tanpa aid=1988, TikTok akan menolak dengan pesan 'params_error'.
+# Jika TikTok memberikan HTTP 429 atau HTML WAF, jangan biarkan JSONDecodeError meledak.
 _orig_fetch_user_room_data = FetchRoomIdAPIRoute.fetch_user_room_data
 
 async def patched_fetch_user_room_data(cls, web, unique_id: str):
-    response = await web.get(
-        url="https://www.tiktok.com/api-live/user/room/",
-        extra_params={"uniqueId": unique_id, "sourceType": 54, "aid": 1988}
-    )
-    d = response.json()
-    if d.get("message") == "user_not_found":
-        raise UserNotFoundError(unique_id, f"Username '{unique_id}' tidak ditemukan di TikTok.")
-    return d
+    try:
+        response = await web.get(
+            url="https://www.tiktok.com/api-live/user/room/",
+            extra_params={"uniqueId": unique_id, "sourceType": 54, "aid": 1988}
+        )
+        if response.status_code == 429:
+            raise TikTokLiveError("TikTok membatasi akses API (HTTP 429 Too Many Requests).")
+        try:
+            d = response.json()
+        except Exception:
+            raise TikTokLiveError("Respons TikTok API bukan format JSON yang valid (kemungkinan diblokir WAF/Rate limit).")
+            
+        if d.get("message") == "user_not_found":
+            raise UserNotFoundError(unique_id, f"Username '{unique_id}' tidak ditemukan di TikTok.")
+        return d
+    except (UserNotFoundError, TikTokLiveError, UserOfflineError):
+        raise
+    except Exception as e:
+        raise TikTokLiveError(f"Gagal mengambil data live dari TikTok: {e}")
 
 FetchRoomIdAPIRoute.fetch_user_room_data = classmethod(patched_fetch_user_room_data)
 
-# === 2. PATCH TIKTOK HTML PARSER UNTUK TIKTOK MODERN ===
+# === 2. PATCH TIKTOK HTML ROUTE UNTUK RESOLUSI ROOM ID MODERN & PROFIL TIKTOK ===
 _orig_parse_room_id = FetchRoomIdLiveHTMLRoute.parse_room_id
 
 def patched_parse_room_id(cls, html: str) -> str:
@@ -69,9 +93,83 @@ def patched_parse_room_id(cls, html: str) -> str:
         return m_rid.group(1)
 
     # 3. Fallback ke parser bawaan TikTokLive (SIGI_STATE)
-    return _orig_parse_room_id(html)
+    try:
+        return _orig_parse_room_id(html)
+    except Exception:
+        raise UserOfflineError("Streamer TikTok sedang offline atau room tidak ditemukan.")
 
 FetchRoomIdLiveHTMLRoute.parse_room_id = classmethod(patched_parse_room_id)
+
+async def patched_fetch_room_id_live_html_call(self, unique_id: str) -> str:
+    """Resolusi Room ID yang sangat handal dengan memeriksa live page, profile page, dan status webcast."""
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8",
+        "Referer": "https://www.tiktok.com/"
+    }
+
+    # Langkah 1: Coba ambil dari halaman live (@unique_id/live)
+    live_url = f"https://www.tiktok.com/@{unique_id}/live"
+    try:
+        resp = await self._web.get(url=live_url, base_params=False, extra_headers=headers)
+        html = resp.text
+        m_univ = re.search(r'<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.*?)</script>', html)
+        if m_univ:
+            d = json.loads(m_univ.group(1))
+            scope = d.get('__DEFAULT_SCOPE__', {})
+            live_detail = scope.get('webapp.live-detail', {})
+            live_room = live_detail.get('liveRoom', {})
+            if live_room:
+                if live_room.get('status') == 4:
+                    raise UserOfflineError(f"Streamer @{unique_id} sedang offline.")
+                rid = live_room.get('roomId')
+                if rid:
+                    return str(rid)
+        m_rid = re.search(r'\"roomId\":\"(\d+)\"', html)
+        if m_rid:
+            return m_rid.group(1)
+    except UserOfflineError:
+        raise
+    except Exception as e:
+        print(f"[TikTokWorker] Notice live HTML check: {e}")
+
+    # Langkah 2: Coba ambil dari halaman profil (@unique_id)
+    # TikTok seringkali menyimpan roomId siaran yang sedang berjalan di profil pengguna
+    profile_url = f"https://www.tiktok.com/@{unique_id}"
+    try:
+        resp_prof = await self._web.get(url=profile_url, base_params=False, extra_headers=headers)
+        html_prof = resp_prof.text
+        m_prof = re.search(r'<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.*?)</script>', html_prof)
+        if m_prof:
+            d_prof = json.loads(m_prof.group(1))
+            scope_prof = d_prof.get('__DEFAULT_SCOPE__', {})
+            user_detail = scope_prof.get('webapp.user-detail')
+            if user_detail:
+                user_info = user_detail.get('userInfo', {})
+                user = user_info.get('user', {})
+                rid = user.get('roomId')
+                if rid and str(rid).isdigit() and int(rid) > 0:
+                    # Validasi apakah siaran live aktif via webcast check_alive
+                    check_resp = await self._web.get(
+                        url="https://webcast.tiktok.com/webcast/room/check_alive/",
+                        extra_params={"room_ids": str(rid)}
+                    )
+                    check_json = check_resp.json()
+                    data_list = check_json.get("data", [])
+                    if data_list and data_list[0].get("alive"):
+                        return str(rid)
+                    else:
+                        raise UserOfflineError(f"Streamer @{unique_id} sedang offline (tidak sedang siaran live).")
+    except UserOfflineError:
+        raise
+    except Exception as e:
+        print(f"[TikTokWorker] Notice profile HTML check: {e}")
+
+    # Langkah 3: Jika tidak ditemukan sama sekali, tandai offline
+    raise UserOfflineError(f"Streamer @{unique_id} sedang offline atau siaran live tidak aktif.")
+
+FetchRoomIdLiveHTMLRoute.__call__ = patched_fetch_room_id_live_html_call
 
 
 def sanitize_tiktok_username(raw: str) -> str:
@@ -320,6 +418,8 @@ class TikTokWorker(QThread):
             err_str = str(e)
             if "UserOfflineError" in err_str or "offline" in err_str.lower():
                 self.last_error_message = f"Pengguna @{self.username} sedang tidak live (Offline)."
+            elif isinstance(e, json.JSONDecodeError) or "Expecting value" in err_str:
+                self.last_error_message = f"TikTok membatasi akses sementara (Rate limit / WAF). Coba beberapa saat lagi atau masukkan Room ID langsung."
             else:
                 self.last_error_message = f"Gagal koneksi live @{self.username}: {err_str}"
             self.error_occurred.emit(self.last_error_message)
