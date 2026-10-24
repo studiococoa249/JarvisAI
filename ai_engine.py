@@ -306,20 +306,18 @@ class AIEngine:
         return reply
 
     def generate_greeting(self, username: str) -> str:
-        """Menghasilkan sapaan penonton yang baru masuk."""
+        """
+        Menghasilkan sapaan penonton yang baru masuk.
+        Hanya menggunakan setup template dari pengaturan, konsisten dan tidak berubah-ubah.
+        """
         clean_user = self.clean_username_for_speech(username)
-        use_ai = self.config.get("greeting_use_ai", False)
+        template = self.config.get("greeting_template", "Halo kak {username}, selamat datang di live!").strip()
+        if not template:
+            template = "Halo kak {username}, selamat datang di live!"
 
-        if use_ai:
-            provider = self.config.get("ai_provider", "gemini")
-            if provider == "gemini":
-                greeting_prompt = f"Sapa dengan ramah penonton live bernama '{clean_user}' dalam 1 kalimat sangat singkat (maksimal 10 kata)."
-                ai_greet = self._call_gemini(clean_user, greeting_prompt)
-                if ai_greet:
-                    return ai_greet
-
-        template = self.config.get("greeting_template", "Halo kak {username}, selamat datang di live!")
-        return template.replace("{username}", clean_user)
+        if "{username}" in template:
+            return template.replace("{username}", clean_user)
+        return f"{template} {clean_user}".strip()
 
 
     def test_gemini(self, api_key: str, model_name: str = "gemini-3.5-flash-lite") -> tuple[bool, str]:

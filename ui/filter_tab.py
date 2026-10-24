@@ -154,16 +154,6 @@ class FilterTab(ScrollArea):
         row_greet_toggle.addStretch()
         greet_layout.addLayout(row_greet_toggle)
 
-        # Toggle AI Sapaan
-        row_ai_greet = QHBoxLayout()
-        lbl_ai_greet = BodyLabel("Gunakan AI untuk Variasi Sapaan Dinamis:", greet_card)
-        self.switch_ai_greet = SwitchButton(greet_card)
-        self.switch_ai_greet.setChecked(self.config.get("greeting_use_ai", False))
-        row_ai_greet.addWidget(lbl_ai_greet)
-        row_ai_greet.addWidget(self.switch_ai_greet)
-        row_ai_greet.addStretch()
-        greet_layout.addLayout(row_ai_greet)
-
         # Template Sapaan
         lbl_template = BodyLabel("Template Sapaan (Gunakan {username} untuk nama penonton):", greet_card)
         greet_layout.addWidget(lbl_template)
@@ -173,6 +163,10 @@ class FilterTab(ScrollArea):
             self.config.get("greeting_template", "Halo kak {username}, selamat datang di live!")
         )
         greet_layout.addWidget(self.input_greet_template)
+
+        lbl_hint = CaptionLabel("Kalimat sapaan hanya akan menggunakan setup template di atas secara konsisten tanpa berubah-ubah.", greet_card)
+        lbl_hint.setStyleSheet("color: #7f8c8d; font-style: italic;")
+        greet_layout.addWidget(lbl_hint)
 
         # Cooldown Sapaan
         grid_cooldown = QGridLayout()
@@ -265,7 +259,7 @@ class FilterTab(ScrollArea):
         self.config.set("custom_triggers", triggers)
 
         self.config.set("enable_greetings", self.switch_enable_greet.isChecked())
-        self.config.set("greeting_use_ai", self.switch_ai_greet.isChecked())
+        self.config.set("greeting_use_ai", False)
         self.config.set("greeting_template", self.input_greet_template.text().strip())
         self.config.set("greeting_cooldown_sec", self.slider_cooldown.value())
 
