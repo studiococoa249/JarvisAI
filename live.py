@@ -12,6 +12,47 @@ if hasattr(sys.stderr, 'reconfigure'):
     except Exception:
         pass
 
+# Fix Python 3.15 lazy import bug with concurrent.futures when Qt/PySide6 is loaded
+import concurrent.futures.thread
+import concurrent.futures.process
+import concurrent.futures
+concurrent.futures.ThreadPoolExecutor = concurrent.futures.thread.ThreadPoolExecutor
+concurrent.futures.ProcessPoolExecutor = concurrent.futures.process.ProcessPoolExecutor
+
+import subprocess
+import importlib
+
+
+REQUIRED_PACKAGES = {
+    "PySide6": "PySide6",
+    "qfluentwidgets": "PySide6-Fluent-Widgets",
+    "TikTokLive": "TikTokLive",
+    "edge_tts": "edge-tts",
+    "google.genai": "google-genai",
+    "pymongo": "pymongo",
+    "dotenv": "python-dotenv",
+}
+
+def install_dependencies():
+    missing = []
+    for module_name, pkg_name in REQUIRED_PACKAGES.items():
+        try:
+            importlib.import_module(module_name)
+        except ImportError:
+            missing.append(pkg_name)
+    
+    if missing:
+        print(f"[Setup] Library belum terinstall: {', '.join(missing)}")
+        print("[Setup] Menginstall dependency via pip, mohon tunggu sebentar...")
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", *missing])
+            print("[Setup] Instalasi library selesai!\n")
+        except subprocess.CalledProcessError as e:
+            print(f"[Error] Gagal menginstall library: {e}")
+            sys.exit(1)
+
+install_dependencies()
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 from qfluentwidgets import setTheme, Theme, setThemeColor

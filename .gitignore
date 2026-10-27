@@ -21,3 +21,4 @@ env/
 
 # Local user configuration & secrets
 config.json
+.env

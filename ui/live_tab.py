@@ -10,6 +10,7 @@ from qfluentwidgets import (
     BodyLabel, InfoBar, InfoBarPosition, FluentIcon as FIF,
     SwitchButton
 )
+from tts_engine import AVAILABLE_VOICES
 
 class LiveTab(QWidget):
     connect_requested = Signal(str)   # username
@@ -37,7 +38,7 @@ class LiveTab(QWidget):
 
         lbl_user = BodyLabel("Username TikTok Live:", self)
         self.input_username = LineEdit(self)
-        self.input_username.setPlaceholderText("Contoh: @toko_online / streamer123")
+        self.input_username.setPlaceholderText("Username / Room ID / Link Share Live")
         self.input_username.setText(self.config.get("tiktok_username", ""))
         self.input_username.setClearButtonEnabled(True)
         self.input_username.setMinimumWidth(240)
@@ -59,6 +60,11 @@ class LiveTab(QWidget):
         self.lbl_ai_mode = CaptionLabel("", self)
         self.update_ai_mode_badge()
         conn_layout.addWidget(self.lbl_ai_mode)
+
+        # Status Badge Karakter Suara Aktif
+        self.lbl_voice_mode = CaptionLabel("", self)
+        self.update_voice_badge()
+        conn_layout.addWidget(self.lbl_voice_mode)
 
         layout.addWidget(conn_card)
 
@@ -135,6 +141,20 @@ class LiveTab(QWidget):
         self.lbl_ai_mode.setText("⚡ Mode Cerdas (Smart Rules)")
         self.lbl_ai_mode.setStyleSheet("color: #d35400; font-weight: bold; background: rgba(211, 84, 0, 0.1); padding: 4px 8px; border-radius: 4px;")
 
+    def update_voice_badge(self):
+        v_id = self.config.get("tts_voice", "gemini_Kore")
+        name = v_id
+        for v in AVAILABLE_VOICES:
+            if v["id"] == v_id:
+                name = v["name"].split(" (")[0].replace("🌟 ", "").replace("👩 ", "").replace("👨 ", "").replace("🧕 ", "").replace("🧔 ", "").replace("👶 ", "").replace("👧 ", "").replace("👦 ", "")
+                break
+        if "gemini_" in v_id:
+            self.lbl_voice_mode.setText(f"🎙️ Suara: {name} (Manusia Asli)")
+            self.lbl_voice_mode.setStyleSheet("color: #8e44ad; font-weight: bold; background: rgba(142, 68, 173, 0.12); padding: 4px 8px; border-radius: 4px;")
+        else:
+            self.lbl_voice_mode.setText(f"🎙️ Suara: {name}")
+            self.lbl_voice_mode.setStyleSheet("color: #2980b9; font-weight: bold; background: rgba(41, 128, 185, 0.12); padding: 4px 8px; border-radius: 4px;")
+
     def _on_connect_clicked(self):
         if not self.is_connected:
             username = self.input_username.text().strip()
@@ -183,6 +203,10 @@ class LiveTab(QWidget):
 
     def update_queue_count(self, count: int):
         self.lbl_queue_count.setText(f"Antrean: {count}")
+        if count >= 3:
+            self.lbl_queue_count.setStyleSheet("font-weight: bold; font-size: 13px; color: #e67e22;")
+        else:
+            self.lbl_queue_count.setStyleSheet("font-weight: bold; font-size: 13px; color: #3498db;")
 
     def add_event_row(self, event_type: str, username: str, message: str, reply: str, will_speak: bool):
         now_str = time.strftime("%H:%M:%S")

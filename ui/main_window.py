@@ -11,6 +11,7 @@ from ai_engine import AIEngine
 from tts_engine import TTSEngine
 from tiktok_worker import TikTokWorker, sanitize_tiktok_username
 from ui.live_tab import LiveTab
+from ui.reminder_tab import ReminderTab
 from ui.scope_tab import ScopeTab
 from ui.settings_tab import SettingsTab
 from ui.filter_tab import FilterTab
@@ -46,6 +47,10 @@ class MainWindow(FluentWindow):
         self._init_connections()
 
         self.log_tab.log("INFO", "Aplikasi TikTok Live Voice Assistant siap digunakan.")
+        if self.config_manager.using_mongodb:
+            self.log_tab.log("INFO", f"Cloud Database: Terhubung ke MongoDB Atlas ({self.config_manager.db_name}.{self.config_manager.collection_name}). Setup 100% tersimpan di Cloud.")
+        else:
+            self.log_tab.log("ERROR", f"Cloud Database Gagal: {self.config_manager.db_error or 'URI kosong'}. Periksa file .env.")
 
     def _init_navigation(self):
         # 1. Tab Live Monitor
@@ -53,22 +58,27 @@ class MainWindow(FluentWindow):
         self.live_tab.setObjectName("liveInterface")
         self.addSubInterface(self.live_tab, FIF.VIDEO, "Live Monitor")
 
-        # 2. Tab Scope AI (Ruang Lingkup & Aturan)
+        # 2. Tab Reminder (Pengingat Otomatis Berkala)
+        self.reminder_tab = ReminderTab(self.config_manager, self)
+        self.reminder_tab.setObjectName("reminderInterface")
+        self.addSubInterface(self.reminder_tab, FIF.RINGER, "Reminder")
+
+        # 3. Tab Scope AI (Ruang Lingkup & Aturan)
         self.scope_tab = ScopeTab(self.config_manager, self)
         self.scope_tab.setObjectName("scopeInterface")
         self.addSubInterface(self.scope_tab, FIF.ROBOT, "Scope AI")
 
-        # 3. Tab Filter & Kata Kunci
+        # 4. Tab Filter & Kata Kunci
         self.filter_tab = FilterTab(self.config_manager, self)
         self.filter_tab.setObjectName("filterInterface")
         self.addSubInterface(self.filter_tab, FIF.FILTER, "Filter & Kata Kunci")
 
-        # 4. Tab Pengaturan AI & Voice
+        # 5. Tab Pengaturan AI & Voice
         self.settings_tab = SettingsTab(self.config_manager, self)
         self.settings_tab.setObjectName("settingsInterface")
         self.addSubInterface(self.settings_tab, FIF.SETTING, "AI & Voice (TTS)")
 
-        # 5. Tab Log
+        # 6. Tab Log
         self.log_tab = LogTab(self)
         self.log_tab.setObjectName("logInterface")
         self.addSubInterface(self.log_tab, FIF.DOCUMENT, "Log Sistem", NavigationItemPosition.BOTTOM)
@@ -90,8 +100,14 @@ class MainWindow(FluentWindow):
         # Scope Tab signals
         self.scope_tab.save_requested.connect(self.live_tab.update_ai_mode_badge)
 
+        # Reminder Tab signals
+        self.reminder_tab.reminder_triggered.connect(self._on_reminder_triggered)
+        self.reminder_tab.test_reminder_requested.connect(self._on_test_reminder)
+
         # Settings Tab signals
         self.settings_tab.save_requested.connect(self.live_tab.update_ai_mode_badge)
+        self.settings_tab.save_requested.connect(self.live_tab.update_voice_badge)
+        self.settings_tab.voice_changed.connect(self._on_voice_changed)
         self.settings_tab.test_voice_requested.connect(self._test_voice)
         self.settings_tab.test_ai_requested.connect(self._test_ai_connection)
         self.settings_tab.sim_comment_requested.connect(self._handle_sim_comment)
@@ -140,6 +156,7 @@ class MainWindow(FluentWindow):
         first_time = not self._was_connected
         self._was_connected = True
         self.live_tab.set_connected_state(True, username)
+        self.reminder_tab.set_live_connected(True)
         if first_time:
             self.log_tab.log("SUCCESS", f"Berhasil tersambung ke live @{username}")
             InfoBar.success(
@@ -156,11 +173,13 @@ class MainWindow(FluentWindow):
     def _on_worker_disconnected(self):
         self._was_connected = False
         self.live_tab.set_connected_state(False)
+        self.reminder_tab.set_live_connected(False)
         self.log_tab.log("INFO", "Koneksi live telah diputus.")
 
     def _on_worker_error(self, err_msg: str):
         self._was_connected = False
         self.live_tab.set_connected_state(False, status_detail=f"Offline: {err_msg}")
+        self.reminder_tab.set_live_connected(False)
         self.log_tab.log("ERROR", err_msg)
         InfoBar.error(
             title="Gagal Terhubung Live",
@@ -187,6 +206,36 @@ class MainWindow(FluentWindow):
         if will_speak and greeting:
             self.tts_engine.add_to_queue(username, greeting, source="Sapaan")
 
+    # --- REMINDER EVENT HANDLERS ---
+    def _on_reminder_triggered(self, message: str, title: str):
+        if not message:
+            return
+
+        avoid_interrupt = bool(self.config_manager.get("reminder_avoid_interrupt", True))
+        if avoid_interrupt and (self.tts_engine.is_busy or len(self.tts_engine.queue) > 0):
+            self.reminder_tab.postpone(10)
+            self.log_tab.log("REMINDER", f"Pengingat [{title}] ditunda 10 detik karena antrean audio sedang berbicara.")
+            return
+
+        self.log_tab.log("REMINDER", f"Menyiarkan Pengingat ({title}): \"{message}\"")
+        self.live_tab.add_event_row("Reminder", "Sistem", f"Pengingat: {title}", message, True)
+        self.tts_engine.add_to_queue("Reminder", message, source="Reminder")
+
+    def _on_test_reminder(self, message: str, title: str):
+        if not message:
+            return
+        self.log_tab.log("REMINDER", f"Uji Coba Pengingat ({title}): \"{message}\"")
+        self.live_tab.add_event_row("Uji Reminder", "Sistem", f"Uji: {title}", message, True)
+        self.tts_engine.add_to_queue("Preview", message, source="Reminder")
+        InfoBar.info(
+            title="Reminder Disiarkan",
+            content=f"Membacakan: \"{message}\"",
+            orient=Qt.Orientation.Horizontal,
+            position=InfoBarPosition.TOP,
+            duration=3500,
+            parent=self.reminder_tab
+        )
+
     def _on_speech_started(self, username: str, text: str):
         self.live_tab.set_speaking_status(username, text)
         self.log_tab.log("VOICE", f"Sedang membacakan: \"{text}\"")
@@ -210,19 +259,24 @@ class MainWindow(FluentWindow):
         greeting = self.ai_engine.generate_greeting(username)
         self._on_join_received(username, greeting, True)
 
+    def _on_voice_changed(self, voice_id: str):
+        self.live_tab.update_voice_badge()
+        self.log_tab.log("INFO", f"Karakter suara aktif disinkronkan: {voice_id}")
+
     # --- TESTING TOOLS ---
     def _test_voice(self, voice_id: str, rate: str, pitch: str, volume: str):
         # Sinkronkan pilihan suara dan slider ke config agar suara live PERSIS sama
-        self.config.set("tts_voice", voice_id)
-        self.config.set("tts_rate", rate)
-        self.config.set("tts_pitch", pitch)
-        self.config.set("tts_volume", volume)
-        self.config.save()
+        self.config_manager.set("tts_voice", voice_id)
+        self.config_manager.set("tts_rate", rate)
+        self.config_manager.set("tts_pitch", pitch)
+        self.config_manager.set("tts_volume", volume)
+        self.config_manager.save()
+        self.live_tab.update_voice_badge()
 
         if "child" in voice_id or "toddler" in voice_id:
-            sample_text = "Halo om dan tante! Selamat datang di live ya, jangan lupa tap-tap layar!"
+            sample_text = "Halo om dan tante! Selamat datang di live ya, jangan lupa bantu tap tap layar!"
         else:
-            sample_text = "Halo semuanya! Selamat datang di siaran live streaming kami, selamat berbelanja ya!"
+            sample_text = "Halo kak, terima kasih banyak sudah mampir di live kita! Mau jajan game pass atau cash DDS? Silakan cek keranjang dan DM admin ya!"
         self.log_tab.log("TEST", f"Menguji suara ({voice_id}) dengan kecepatan {rate} dan nada {pitch}...")
         self.tts_engine.add_to_queue("Preview", sample_text, source="Uji Suara", voice_id=voice_id)
 
